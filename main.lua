@@ -63,7 +63,7 @@ function SimpleLib:win(options)
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 	}, player:WaitForChild("PlayerGui"))
 
-	local requestedSize = options.size or UDim2.fromOffset(560, 420)
+	local requestedSize = options.size or options.Size or UDim2.fromOffset(560, 420)
 	local window = setmetatable({
 		_screenGui = screenGui,
 		_tabs = {},
@@ -109,7 +109,7 @@ function SimpleLib:win(options)
 		Size = UDim2.new(1, -112, 0, 27),
 		BackgroundTransparency = 1,
 		Font = Enum.Font.GothamBold,
-		Text = options.title or "Simple Lib",
+		Text = options.title or options.Name or "Simple Lib",
 		TextColor3 = COLORS.text,
 		TextSize = 19,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -123,7 +123,7 @@ function SimpleLib:win(options)
 		Size = UDim2.new(1, -112, 0, 18),
 		BackgroundTransparency = 1,
 		Font = Enum.Font.Gotham,
-		Text = options.desc or "A clean space for your tools",
+		Text = options.desc or options.Description or "A clean space for your tools",
 		TextColor3 = COLORS.muted,
 		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -350,6 +350,9 @@ function SimpleLib:win(options)
 	return window
 end
 
+SimpleLib.window = SimpleLib.win
+SimpleLib.CreateWindow = SimpleLib.win
+
 function SimpleLib:_updateLoadingProgress()
 	if not self._progressFill or self._loadingFinished then
 		return
@@ -418,9 +421,13 @@ function SimpleLib:section(options)
 end
 
 function SimpleLib:tab(options)
-	options = options or {}
+	if type(options) == "string" then
+		options = { title = options }
+	else
+		options = options or {}
+	end
 	local tabIndex = #self._tabs + 1
-	local tabTitle = options.title or ("Tab " .. tabIndex)
+	local tabTitle = options.title or options.Name or ("Tab " .. tabIndex)
 
 	local tabButton = create("TextButton", {
 		Name = "Tab_" .. tabIndex,
@@ -487,10 +494,16 @@ function SimpleLib:tab(options)
 	return tab
 end
 
+SimpleLib.CreateTab = SimpleLib.tab
+
 SimpleLib.Tab = {}
 
 function SimpleLib.Tab:section(options)
-	options = options or {}
+	if type(options) == "string" then
+		options = { title = options }
+	else
+		options = options or {}
+	end
 	local window = self._window
 	window._sections = window._sections + 1
 	local sectionIndex = #self._sections + 1
@@ -512,7 +525,7 @@ function SimpleLib.Tab:section(options)
 		Size = UDim2.new(1, 0, 0, 22),
 		BackgroundTransparency = 1,
 		Font = Enum.Font.GothamSemibold,
-		Text = options.title or "Section",
+		Text = options.title or options.Name or "Section",
 		TextColor3 = COLORS.text,
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -531,14 +544,21 @@ function SimpleLib.Tab:section(options)
 	return section
 end
 
+SimpleLib.Tab.CreateSection = SimpleLib.Tab.section
+
 function SimpleLib.Tab:button(options)
 	return self:section({ title = options and options.section or "Actions" }):button(options)
 end
+
+SimpleLib.Tab.btn = SimpleLib.Tab.button
+SimpleLib.Tab.CreateButton = SimpleLib.Tab.button
 
 SimpleLib.Section = {}
 
 function SimpleLib.Section:button(options)
 	options = options or {}
+	local callback = options.callback or options.Callback
+	assert(callback == nil or type(callback) == "function", "button callback must be a function")
 	local window = self._window
 	window._buttons = window._buttons + 1
 	local buttonIndex = #self._buttons + 1
@@ -566,11 +586,10 @@ function SimpleLib.Section:button(options)
 	}, button)
 	create("TextLabel", {
 		Name = "Title",
-		Name = "Title",
 		Size = UDim2.new(1, 0, 0, 20),
 		BackgroundTransparency = 1,
 		Font = Enum.Font.GothamSemibold,
-		Text = options.title or "Button",
+		Text = options.title or options.Name or "Button",
 		TextColor3 = COLORS.text,
 		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -585,7 +604,7 @@ function SimpleLib.Section:button(options)
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
 		Font = Enum.Font.Gotham,
-		Text = options.desc or "",
+		Text = options.desc or options.Description or "",
 		TextColor3 = COLORS.muted,
 		TextSize = 11,
 		TextWrapped = true,
@@ -602,8 +621,8 @@ function SimpleLib.Section:button(options)
 		tween(button, 0.14, { BackgroundColor3 = COLORS.surface })
 	end)
 	button.Activated:Connect(function()
-		if options.callback then
-			options.callback()
+		if callback then
+			callback()
 		end
 	end)
 
@@ -611,6 +630,9 @@ function SimpleLib.Section:button(options)
 	window:_updateLoadingProgress()
 	return button
 end
+
+SimpleLib.Section.btn = SimpleLib.Section.button
+SimpleLib.Section.CreateButton = SimpleLib.Section.button
 
 function SimpleLib:destroy()
 	for _, connection in ipairs(self._connections) do
@@ -623,5 +645,8 @@ function SimpleLib:destroy()
 	end
 	self._loadingOverlay = nil
 end
+
+SimpleLib.CreateSection = SimpleLib.section
+SimpleLib.Destroy = SimpleLib.destroy
 
 return SimpleLib
