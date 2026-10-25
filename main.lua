@@ -74,6 +74,7 @@ function SimpleLib:win(options)
 		_loadingFinished = false,
 		_loadingProgress = 0.12,
 		_minimized = false,
+		_confirmDialog = nil,
 		_interaction = nil,
 		_connections = {},
 	}, self)
@@ -97,30 +98,38 @@ function SimpleLib:win(options)
 
 	local header = create("Frame", {
 		Name = "Header",
-		Size = UDim2.new(1, 0, 0, 76),
-		BackgroundColor3 = COLORS.panel,
+		Size = UDim2.new(1, 0, 0, 64),
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 	}, main)
 	window._header = header
+	create("Frame", {
+		Name = "HeaderDivider",
+		Position = UDim2.new(0, 20, 1, -1),
+		Size = UDim2.new(1, -40, 0, 1),
+		BackgroundColor3 = COLORS.border,
+		BackgroundTransparency = 0.55,
+		BorderSizePixel = 0,
+	}, header)
 
 	local title = create("TextLabel", {
 		Name = "Title",
-		Position = UDim2.fromOffset(22, 14),
-		Size = UDim2.new(1, -112, 0, 27),
+		Position = UDim2.fromOffset(22, 10),
+		Size = UDim2.new(1, -154, 0, 25),
 		BackgroundTransparency = 1,
 		Font = Enum.Font.GothamBold,
 		Text = options.title or options.Name or "Simple Lib",
 		TextColor3 = COLORS.text,
-		TextSize = 19,
+		TextSize = 18,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
 	}, header)
 	window._title = title
 
-	create("TextLabel", {
+	local description = create("TextLabel", {
 		Name = "Description",
-		Position = UDim2.fromOffset(23, 42),
-		Size = UDim2.new(1, -112, 0, 18),
+		Position = UDim2.fromOffset(23, 36),
+		Size = UDim2.new(1, -154, 0, 17),
 		BackgroundTransparency = 1,
 		Font = Enum.Font.Gotham,
 		Text = options.desc or options.Description or "A clean space for your tools",
@@ -129,21 +138,22 @@ function SimpleLib:win(options)
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
 	}, header)
+	window._description = description
 
 	local minimizeButton = create("TextButton", {
 		Name = "Minimize",
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -18, 0.5, 0),
-		Size = UDim2.fromOffset(34, 34),
+		Position = UDim2.new(1, -58, 0.5, 0),
+		Size = UDim2.fromOffset(32, 32),
 		BackgroundColor3 = COLORS.surface,
 		BorderSizePixel = 0,
 		AutoButtonColor = false,
 		Font = Enum.Font.GothamMedium,
 		Text = "-",
 		TextColor3 = COLORS.text,
-		TextSize = 20,
+		TextSize = 18,
 	}, header)
-	addCorner(minimizeButton, 10)
+	addCorner(minimizeButton, 9)
 	minimizeButton.MouseEnter:Connect(function()
 		tween(minimizeButton, 0.15, { BackgroundColor3 = COLORS.surfaceHover })
 	end)
@@ -151,10 +161,37 @@ function SimpleLib:win(options)
 		tween(minimizeButton, 0.15, { BackgroundColor3 = COLORS.surface })
 	end)
 
+	local closeButton = create("TextButton", {
+		Name = "Close",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -18, 0.5, 0),
+		Size = UDim2.fromOffset(32, 32),
+		BackgroundColor3 = COLORS.surface,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Font = Enum.Font.GothamMedium,
+		Text = "×",
+		TextColor3 = COLORS.muted,
+		TextSize = 20,
+	}, header)
+	addCorner(closeButton, 9)
+	closeButton.MouseEnter:Connect(function()
+		tween(closeButton, 0.15, {
+			BackgroundColor3 = Color3.fromRGB(105, 48, 59),
+			TextColor3 = COLORS.text,
+		})
+	end)
+	closeButton.MouseLeave:Connect(function()
+		tween(closeButton, 0.15, {
+			BackgroundColor3 = COLORS.surface,
+			TextColor3 = COLORS.muted,
+		})
+	end)
+
 	local body = create("Frame", {
 		Name = "Body",
-		Position = UDim2.fromOffset(0, 76),
-		Size = UDim2.new(1, 0, 1, -76),
+		Position = UDim2.fromOffset(0, 64),
+		Size = UDim2.new(1, 0, 1, -64),
 		BackgroundTransparency = 1,
 	}, main)
 	window._body = body
@@ -162,7 +199,7 @@ function SimpleLib:win(options)
 	local sidebar = create("Frame", {
 		Name = "Sidebar",
 		Size = UDim2.new(0, 142, 1, 0),
-		BackgroundColor3 = COLORS.panel,
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 	}, body)
 	addPadding(sidebar, 10, 13, 10, 12)
@@ -187,11 +224,24 @@ function SimpleLib:win(options)
 		Size = UDim2.fromOffset(22, 22),
 		BackgroundTransparency = 1,
 		AutoButtonColor = false,
-		Font = Enum.Font.Gotham,
-		Text = "◢",
-		TextColor3 = COLORS.muted,
-		TextSize = 12,
+		Text = "",
 	}, main)
+	create("Frame", {
+		Position = UDim2.new(1, -15, 1, -8),
+		Size = UDim2.fromOffset(9, 2),
+		Rotation = -45,
+		BackgroundColor3 = COLORS.muted,
+		BorderSizePixel = 0,
+		Active = false,
+	}, resizeGrip)
+	create("Frame", {
+		Position = UDim2.new(1, -9, 1, -8),
+		Size = UDim2.fromOffset(5, 2),
+		Rotation = -45,
+		BackgroundColor3 = COLORS.muted,
+		BorderSizePixel = 0,
+		Active = false,
+	}, resizeGrip)
 
 	local interaction = window._interaction
 	local dragStart
@@ -263,6 +313,7 @@ function SimpleLib:win(options)
 			window._minimized = false
 			body.Visible = true
 			resizeGrip.Visible = true
+			description.Visible = true
 			minimizeButton.Text = "-"
 			tween(main, 0.22, { Size = restoreSize })
 		else
@@ -270,9 +321,126 @@ function SimpleLib:win(options)
 			window._minimized = true
 			body.Visible = false
 			resizeGrip.Visible = false
+			description.Visible = false
 			minimizeButton.Text = "+"
-			tween(main, 0.22, { Size = UDim2.new(restoreSize.X.Scale, restoreSize.X.Offset, 0, 76) })
+			tween(main, 0.22, { Size = UDim2.new(restoreSize.X.Scale, restoreSize.X.Offset, 0, 54) })
 		end
+	end)
+
+	closeButton.Activated:Connect(function()
+		if window._confirmDialog then
+			return
+		end
+
+		local dialogOverlay = create("Frame", {
+			Name = "ConfirmCloseOverlay",
+			Position = UDim2.fromOffset(1, 1),
+			Size = UDim2.new(1, -2, 1, -2),
+			BackgroundColor3 = Color3.fromRGB(5, 6, 9),
+			BackgroundTransparency = 0.32,
+			BorderSizePixel = 0,
+			ClipsDescendants = true,
+			ZIndex = 20,
+		}, main)
+		addCorner(dialogOverlay, 13)
+		window._confirmDialog = dialogOverlay
+
+		local dialog = create("Frame", {
+			Name = "Dialog",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromOffset(310, 158),
+			BackgroundColor3 = COLORS.panel,
+			BorderSizePixel = 0,
+			ZIndex = 21,
+		}, dialogOverlay)
+		addCorner(dialog, 13)
+		create("UIStroke", {
+			Color = COLORS.border,
+			Transparency = 0.1,
+			Thickness = 1,
+		}, dialog)
+
+		create("TextLabel", {
+			Name = "Title",
+			Position = UDim2.fromOffset(20, 18),
+			Size = UDim2.new(1, -40, 0, 23),
+			BackgroundTransparency = 1,
+			Font = Enum.Font.GothamSemibold,
+			Text = "Đóng menu?",
+			TextColor3 = COLORS.text,
+			TextSize = 15,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ZIndex = 22,
+		}, dialog)
+
+		create("TextLabel", {
+			Name = "Description",
+			Position = UDim2.fromOffset(20, 47),
+			Size = UDim2.new(1, -40, 0, 38),
+			BackgroundTransparency = 1,
+			Font = Enum.Font.Gotham,
+			Text = "Bạn có muốn gỡ menu khỏi màn hình không?",
+			TextColor3 = COLORS.muted,
+			TextSize = 12,
+			TextWrapped = true,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextYAlignment = Enum.TextYAlignment.Top,
+			ZIndex = 22,
+		}, dialog)
+
+		local cancelButton = create("TextButton", {
+			Name = "Cancel",
+			Position = UDim2.new(0, 20, 1, -48),
+			Size = UDim2.new(0.5, -26, 0, 32),
+			BackgroundColor3 = COLORS.surface,
+			BorderSizePixel = 0,
+			AutoButtonColor = false,
+			Font = Enum.Font.GothamMedium,
+			Text = "Hủy",
+			TextColor3 = COLORS.text,
+			TextSize = 12,
+			ZIndex = 22,
+		}, dialog)
+		addCorner(cancelButton, 8)
+
+		local confirmButton = create("TextButton", {
+			Name = "Confirm",
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -20, 1, -48),
+			Size = UDim2.new(0.5, -26, 0, 32),
+			BackgroundColor3 = Color3.fromRGB(170, 63, 76),
+			BorderSizePixel = 0,
+			AutoButtonColor = false,
+			Font = Enum.Font.GothamMedium,
+			Text = "Xóa menu",
+			TextColor3 = COLORS.text,
+			TextSize = 12,
+			ZIndex = 22,
+		}, dialog)
+		addCorner(confirmButton, 8)
+
+		cancelButton.Activated:Connect(function()
+			if window._confirmDialog then
+				window._confirmDialog:Destroy()
+				window._confirmDialog = nil
+			end
+		end)
+		confirmButton.Activated:Connect(function()
+			window:destroy()
+		end)
+		cancelButton.MouseEnter:Connect(function()
+			tween(cancelButton, 0.14, { BackgroundColor3 = COLORS.surfaceHover })
+		end)
+		cancelButton.MouseLeave:Connect(function()
+			tween(cancelButton, 0.14, { BackgroundColor3 = COLORS.surface })
+		end)
+		confirmButton.MouseEnter:Connect(function()
+			tween(confirmButton, 0.14, { BackgroundColor3 = Color3.fromRGB(195, 70, 83) })
+		end)
+		confirmButton.MouseLeave:Connect(function()
+			tween(confirmButton, 0.14, { BackgroundColor3 = Color3.fromRGB(170, 63, 76) })
+		end)
 	end)
 
 	if window._loadingOptions then
@@ -583,11 +751,14 @@ function SimpleLib.Section:button(options)
 	}, self._container)
 	addCorner(button, 10)
 	addPadding(button, 13, 10, 13, 10)
+	local buttonScale = create("UIScale", {
+		Scale = 1,
+	}, button)
 	create("UIListLayout", {
 		Padding = UDim.new(0, 3),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, button)
-	create("UIStroke", {
+	local buttonStroke = create("UIStroke", {
 		Color = COLORS.border,
 		Transparency = 0.45,
 		Thickness = 1,
@@ -629,6 +800,17 @@ function SimpleLib.Section:button(options)
 		tween(button, 0.14, { BackgroundColor3 = COLORS.surface })
 	end)
 	button.Activated:Connect(function()
+		tween(buttonScale, 0.08, { Scale = 0.97 }).Completed:Connect(function()
+			if buttonScale.Parent then
+				tween(buttonScale, 0.16, { Scale = 1 })
+			end
+		end)
+		tween(buttonStroke, 0.12, { Color = COLORS.accent, Transparency = 0.12 })
+		task.delay(0.14, function()
+			if buttonStroke.Parent then
+				tween(buttonStroke, 0.2, { Color = COLORS.border, Transparency = 0.45 })
+			end
+		end)
 		if callback then
 			callback()
 		end
@@ -652,6 +834,7 @@ function SimpleLib:destroy()
 		self._screenGui = nil
 	end
 	self._loadingOverlay = nil
+	self._confirmDialog = nil
 end
 
 SimpleLib.CreateSection = SimpleLib.section
