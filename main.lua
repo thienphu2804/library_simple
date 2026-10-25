@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -97,6 +98,22 @@ local function tween(object, duration, properties)
 	return animation
 end
 
+local function playSound(window, soundName)
+	local sound = window._sounds and window._sounds[soundName]
+	if not sound then
+		return
+	end
+
+	local now = os.clock()
+	if now - (window._lastSoundAt[soundName] or 0) < 0.04 then
+		return
+	end
+	window._lastSoundAt[soundName] = now
+	sound:Stop()
+	sound.TimePosition = 0
+	sound:Play()
+end
+
 function SimpleLib:win(options)
 	options = options or {}
 
@@ -125,7 +142,21 @@ function SimpleLib:win(options)
 		_confirmDialog = nil,
 		_interaction = nil,
 		_connections = {},
+		_sounds = {},
+		_lastSoundAt = {},
 	}, self)
+
+	for soundName, assetId in pairs({
+		button = "9113744905",
+		section = "9114083230",
+		dropdown = "9114083230",
+	}) do
+		window._sounds[soundName] = create("Sound", {
+			Name = "SimpleLib_" .. soundName,
+			SoundId = "rbxassetid://" .. assetId,
+			Volume = 0.35,
+		}, SoundService)
+	end
 
 	local main = create("Frame", {
 		Name = "Window",
@@ -260,6 +291,7 @@ function SimpleLib:win(options)
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, sidebar)
 	window._sidebar = sidebar
+	window._sidebarLayout = sidebarLayout
 	sidebarLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 		sidebar.CanvasSize = UDim2.new(0, 0, 0, sidebarLayout.AbsoluteContentSize.Y + 25)
 	end)
@@ -650,10 +682,19 @@ function SimpleLib:section(options)
 	end
 
 	local sectionIndex = #self._navigationSections + 1
+	local initiallyOpen = options.open
+	if initiallyOpen == nil then
+		initiallyOpen = options.Open
+	end
+	if initiallyOpen == nil then
+		initiallyOpen = true
+	end
+	assert(type(initiallyOpen) == "boolean", "section open option must be a boolean")
+
 	local container = create("Frame", {
 		Name = "NavigationSection_" .. sectionIndex,
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, 0, 0, 28),
+		ClipsDescendants = true,
 		BackgroundTransparency = 1,
 		LayoutOrder = sectionIndex,
 	}, self._sidebar)
@@ -664,22 +705,23 @@ function SimpleLib:section(options)
 	local sectionTitle = options.title or options.Name or ("Section " .. sectionIndex)
 	local sectionHeader = create("TextButton", {
 		Name = "SectionHeader",
-		Size = UDim2.new(1, 0, 0, 28),
+		Size = UDim2.new(1, 0, 0, 30),
 		BackgroundTransparency = 1,
 		AutoButtonColor = false,
 		Font = Enum.Font.GothamSemibold,
-		Text = "↑   " .. sectionTitle,
+		Text = (initiallyOpen and "↑   " or "↓   ") .. sectionTitle,
 		TextColor3 = COLORS.muted,
-		TextSize = 11,
+		TextSize = 15,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		LayoutOrder = 1,
 	}, container)
 	local tabContainer = create("Frame", {
 		Name = "Tabs",
+		Position = UDim2.fromOffset(0, 35),
 		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
+		Visible = initiallyOpen,
 		LayoutOrder = 2,
 	}, container)
 	local tabContainerLayout = create("UIListLayout", {
@@ -694,19 +736,69 @@ function SimpleLib:section(options)
 		_tabContainer = tabContainer,
 		_tabs = {},
 		_title = sectionTitle,
-		_open = true,
+		_open = initiallyOpen,
+		_animation = nil,
 	}, { __index = SimpleLib.NavigationSection })
 	function section:SetOpen(isOpen)
+		assert(type(isOpen) == "boolean", "section open state must be a boolean")
+		if self._animation then
+			self._animation:Cancel()
+			self._animation = nil
+		end
 		self._open = isOpen
-		self._tabContainer.Visible = isOpen
 		self._header.Text = (isOpen and "↑   " or "↓   ") .. self._title
+		playSound(self._window, "section")
+
+		local tabsHeight = tabContainerLayout.AbsoluteContentSize.Y
+		self._tabContainer.Visible = true
+		if isOpen then
+			self._tabContainer.Size = UDim2.new(1, 0, 0, 0)
+		end
+		local animation = tween(self._container, 0.22, {
+			Size = UDim2.new(1, 0, 0, isOpen and (35 + tabsHeight) or 30),
+		})
+		self._animation = animation
+		tween(self._tabContainer, 0.22, {
+			Size = UDim2.new(1, 0, 0, isOpen and tabsHeight or 0),
+		})
+		animation.Completed:Connect(function(playbackState)
+			if self._animation ~= animation then
+				return
+			end
+			self._animation = nil
+			if playbackState == Enum.PlaybackState.Completed and not self._open then
+				self._tabContainer.Visible = false
+			end
+		end)
 	end
 	sectionHeader.Activated:Connect(function()
 		section:SetOpen(not section._open)
 	end)
 	tabContainerLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-		tabContainer.Size = UDim2.new(1, 0, 0, tabContainerLayout.AbsoluteContentSize.Y)
+		local tabsHeight = tabContainerLayout.AbsoluteContentSize.Y
+		if section._open and not section._animation then
+			tabContainer.Size = UDim2.new(1, 0, 0, tabsHeight)
+			container.Size = UDim2.new(1, 0, 0, 35 + tabsHeight)
+		end
+		self._sidebar.CanvasSize = UDim2.new(
+			0,
+			0,
+			0,
+			self._sidebarLayout.AbsoluteContentSize.Y + 25
+		)
 	end)
+	tabContainer.Size = UDim2.new(
+		1,
+		0,
+		0,
+		initiallyOpen and tabContainerLayout.AbsoluteContentSize.Y or 0
+	)
+	container.Size = UDim2.new(
+		1,
+		0,
+		0,
+		initiallyOpen and (35 + tabContainerLayout.AbsoluteContentSize.Y) or 30
+	)
 	table.insert(self._navigationSections, section)
 	return section
 end
@@ -748,17 +840,28 @@ function SimpleLib.NavigationSection:tab(options)
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		CanvasSize = UDim2.new(),
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		AutomaticCanvasSize = Enum.AutomaticSize.None,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 		ScrollBarThickness = 3,
 		ScrollBarImageColor3 = COLORS.accent,
 		Visible = false,
 	}, self._pages)
 	addPadding(page, 18, 18, 18, 18)
-	create("UIListLayout", {
+	local pageLayout = create("UIListLayout", {
 		Padding = UDim.new(0, 17),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, page)
+	local function updatePageCanvas()
+		page.CanvasSize = UDim2.new(
+			0,
+			0,
+			0,
+			pageLayout.AbsoluteContentSize.Y + 36
+		)
+	end
+	pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updatePageCanvas)
+	page:GetPropertyChangedSignal("AbsoluteSize"):Connect(updatePageCanvas)
+	updatePageCanvas()
 
 	local tab = setmetatable({
 		_window = window,
@@ -771,8 +874,8 @@ function SimpleLib.NavigationSection:tab(options)
 	table.insert(self._tabs, tab)
 	table.insert(window._tabs, tab)
 
-	local function selectTab()
-		if not self._open then
+	local function selectTab(shouldOpenSection)
+		if shouldOpenSection and not self._open then
 			self:SetOpen(true)
 		end
 		for _, existingTab in ipairs(window._tabs) do
@@ -784,9 +887,11 @@ function SimpleLib.NavigationSection:tab(options)
 			})
 		end
 	end
-	tabButton.Activated:Connect(selectTab)
+	tabButton.Activated:Connect(function()
+		selectTab(true)
+	end)
 	if #window._tabs == 1 then
-		selectTab()
+		selectTab(false)
 	end
 
 	return tab
@@ -914,15 +1019,31 @@ local function createControlCard(section, options, controlName, accessoryWidth, 
 	}, card)
 
 	local function animatePress()
-		tween(scale, 0.08, { Scale = 0.98 }).Completed:Connect(function()
+		if control._pressTween then
+			control._pressTween:Cancel()
+		end
+		if control._strokeTween then
+			control._strokeTween:Cancel()
+		end
+		if control._resetStrokeTask then
+			task.cancel(control._resetStrokeTask)
+		end
+
+		local pressTween = tween(scale, 0.08, { Scale = 0.96 })
+		control._pressTween = pressTween
+		pressTween.Completed:Connect(function(playbackState)
+			if playbackState ~= Enum.PlaybackState.Completed or control._pressTween ~= pressTween then
+				return
+			end
 			if scale.Parent then
-				tween(scale, 0.16, { Scale = 1 })
+				control._pressTween = tween(scale, 0.16, { Scale = 1 })
 			end
 		end)
-		tween(stroke, 0.12, { Color = COLORS.accent, Transparency = 0.12 })
-		task.delay(0.14, function()
+		control._strokeTween = tween(stroke, 0.12, { Color = COLORS.accent, Transparency = 0.12 })
+		control._resetStrokeTask = task.delay(0.14, function()
+			control._resetStrokeTask = nil
 			if stroke.Parent then
-				tween(stroke, 0.2, { Color = COLORS.border, Transparency = 0.45 })
+				control._strokeTween = tween(stroke, 0.2, { Color = COLORS.border, Transparency = 0.45 })
 			end
 		end)
 	end
@@ -957,6 +1078,7 @@ function SimpleLib.Section:button(options)
 	local callback = getCallback(options)
 	local control = createControlCard(self, options, "Button", nil, true)
 	control.card.Activated:Connect(function()
+		playSound(self._window, "button")
 		control.animatePress()
 		if callback then
 			callback()
@@ -1015,10 +1137,16 @@ function SimpleLib.Section:toggle(options)
 	function toggle:Set(value, shouldNotify)
 		assert(type(value) == "boolean", "toggle value must be a boolean")
 		self._value = value
-		tween(switch, 0.16, {
+		if self._switchTween then
+			self._switchTween:Cancel()
+		end
+		if self._knobTween then
+			self._knobTween:Cancel()
+		end
+		self._switchTween = tween(switch, 0.16, {
 			BackgroundColor3 = value and COLORS.accent or COLORS.border,
 		})
-		tween(knob, 0.16, {
+		self._knobTween = tween(knob, 0.16, {
 			Position = UDim2.fromOffset(value and 20 or 2, 2),
 		})
 		if shouldNotify ~= false and callback then
@@ -1033,6 +1161,7 @@ function SimpleLib.Section:toggle(options)
 	end
 
 	switch.Activated:Connect(function()
+		playSound(self._window, "button")
 		control.animatePress()
 		toggle:Set(not toggle._value)
 	end)
@@ -1105,22 +1234,36 @@ function SimpleLib.Section:dropdown(options)
 	local optionsList = create("Frame", {
 		Name = "Options",
 		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
 		Visible = false,
+		ClipsDescendants = true,
 		LayoutOrder = 3,
 	}, control.card)
 	create("UIListLayout", {
 		Padding = UDim.new(0, 4),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, optionsList)
+	local initiallyOpen = options.open
+	if initiallyOpen == nil then
+		initiallyOpen = options.Open
+	end
+	if initiallyOpen == nil then
+		initiallyOpen = false
+	end
+	assert(type(initiallyOpen) == "boolean", "dropdown open option must be a boolean")
 
 	local dropdown = {
+		_window = self._window,
 		_value = selected,
 		_options = items,
 		_instance = control.card,
 		_open = false,
+		_animation = nil,
 	}
+	local function getOptionsHeight()
+		local optionCount = #dropdown._options
+		return optionCount * 30 + math.max(0, optionCount - 1) * 4
+	end
 	function dropdown:Get()
 		return self._value
 	end
@@ -1136,8 +1279,45 @@ function SimpleLib.Section:dropdown(options)
 			callback(value, value and table.find(self._options, value) or nil)
 		end
 	end
+	function dropdown:SetOpen(isOpen)
+		assert(type(isOpen) == "boolean", "dropdown open state must be a boolean")
+		if self._open == isOpen and not self._animation then
+			return
+		end
+		if self._animation then
+			self._animation:Cancel()
+			self._animation = nil
+		end
+		self._open = isOpen
+		if isOpen then
+			optionsList.Visible = true
+			optionsList.Size = UDim2.new(1, 0, 0, 0)
+		end
+		arrow.Text = isOpen and "⌃" or "⌄"
+		playSound(self._window, "dropdown")
+
+		local targetHeight = isOpen and getOptionsHeight() or 0
+		local animation = tween(optionsList, 0.2, {
+			Size = UDim2.new(1, 0, 0, targetHeight),
+		})
+		self._animation = animation
+		animation.Completed:Connect(function(playbackState)
+			if self._animation ~= animation then
+				return
+			end
+			self._animation = nil
+			if playbackState == Enum.PlaybackState.Completed and not self._open then
+				optionsList.Visible = false
+			end
+		end)
+	end
 	function dropdown:SetOptions(newItems)
 		assert(type(newItems) == "table", "dropdown options must be a table")
+		if self._animation then
+			self._animation:Cancel()
+			self._animation = nil
+		end
+		local previousValue = self._value
 		self._options = {}
 		for index, item in ipairs(newItems) do
 			assert(type(item) == "string" or type(item) == "number", "dropdown items must be strings or numbers")
@@ -1151,6 +1331,7 @@ function SimpleLib.Section:dropdown(options)
 				child:Destroy()
 			end
 		end
+		optionsList.Size = UDim2.new(1, 0, 0, 0)
 		for index, item in ipairs(self._options) do
 			local optionButton = create("TextButton", {
 				Name = "Option_" .. index,
@@ -1175,11 +1356,26 @@ function SimpleLib.Section:dropdown(options)
 			end)
 			optionButton.Activated:Connect(function()
 				control.animatePress()
+				playSound(self._window, "dropdown")
 				self:Set(item)
-				self._open = false
-				optionsList.Visible = false
-				arrow.Text = "⌄"
+				self:SetOpen(false)
 			end)
+		end
+		if self._open then
+			optionsList.Visible = true
+			optionsList.Size = UDim2.new(1, 0, 0, 0)
+			local animation = tween(optionsList, 0.2, {
+				Size = UDim2.new(1, 0, 0, getOptionsHeight()),
+			})
+			self._animation = animation
+			animation.Completed:Connect(function()
+				if self._animation == animation then
+					self._animation = nil
+				end
+			end)
+		end
+		if previousValue and table.find(self._options, previousValue) then
+			self:Set(previousValue, false)
 		end
 	end
 	function dropdown:Destroy()
@@ -1191,13 +1387,14 @@ function SimpleLib.Section:dropdown(options)
 
 	rowButton.Activated:Connect(function()
 		control.animatePress()
-		dropdown._open = not dropdown._open
-		optionsList.Visible = dropdown._open
-		arrow.Text = dropdown._open and "⌃" or "⌄"
+		dropdown:SetOpen(not dropdown._open)
 	end)
 	dropdown:SetOptions(items)
 	if selected then
 		dropdown:Set(selected, false)
+	end
+	if initiallyOpen then
+		dropdown:SetOpen(true)
 	end
 	return dropdown
 end
@@ -1223,6 +1420,10 @@ function SimpleLib:destroy()
 		connection:Disconnect()
 	end
 	table.clear(self._connections)
+	for _, sound in pairs(self._sounds) do
+		sound:Destroy()
+	end
+	table.clear(self._sounds)
 	if self._screenGui then
 		self._screenGui:Destroy()
 		self._screenGui = nil
