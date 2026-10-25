@@ -279,12 +279,14 @@ function SimpleLib:win(options)
 		local loading = window._loadingOptions
 		local overlay = create("Frame", {
 			Name = "LoadingOverlay",
-			Size = UDim2.fromScale(1, 1),
+			Position = UDim2.fromOffset(1, 1),
+			Size = UDim2.new(1, -2, 1, -2),
 			BackgroundColor3 = COLORS.background,
 			BorderSizePixel = 0,
+			ClipsDescendants = true,
 			ZIndex = 10,
 		}, main)
-		addCorner(overlay, 14)
+		addCorner(overlay, 13)
 		window._loadingOverlay = overlay
 
 		local loadingTitle = create("TextLabel", {
@@ -345,6 +347,12 @@ function SimpleLib:win(options)
 			TextXAlignment = Enum.TextXAlignment.Right,
 			ZIndex = 11,
 		}, overlay)
+	end
+
+	if window._loadingOverlay and window._loadingOptions.autoFinish ~= false then
+		task.defer(function()
+			window:finishLoading()
+		end)
 	end
 
 	return window
