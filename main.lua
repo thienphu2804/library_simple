@@ -276,16 +276,16 @@ function SimpleLib:win(options)
 		Name = "ResizeGrip",
 		AnchorPoint = Vector2.new(1, 1),
 		Position = UDim2.new(1, 0, 1, 0),
-		Size = UDim2.fromOffset(22, 22),
-		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(36, 36),
+		BackgroundColor3 = COLORS.surface,
+		BackgroundTransparency = 0.08,
 		AutoButtonColor = false,
 		Font = Enum.Font.GothamMedium,
 		Text = "↘",
-		TextColor3 = COLORS.muted,
-		TextSize = 17,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		TextYAlignment = Enum.TextYAlignment.Bottom,
+		TextColor3 = COLORS.text,
+		TextSize = 22,
 	}, main)
+	addCorner(resizeGrip, 11)
 
 	local interaction = window._interaction
 	local dragStart
@@ -661,24 +661,52 @@ function SimpleLib:section(options)
 		Padding = UDim.new(0, 5),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, container)
-	create("TextLabel", {
-		Name = "SectionTitle",
-		Size = UDim2.new(1, 0, 0, 22),
+	local sectionTitle = options.title or options.Name or ("Section " .. sectionIndex)
+	local sectionHeader = create("TextButton", {
+		Name = "SectionHeader",
+		Size = UDim2.new(1, 0, 0, 28),
 		BackgroundTransparency = 1,
+		AutoButtonColor = false,
 		Font = Enum.Font.GothamSemibold,
-		Text = options.title or options.Name or ("Section " .. sectionIndex),
+		Text = "↑   " .. sectionTitle,
 		TextColor3 = COLORS.muted,
 		TextSize = 11,
 		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
 		LayoutOrder = 1,
 	}, container)
+	local tabContainer = create("Frame", {
+		Name = "Tabs",
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		LayoutOrder = 2,
+	}, container)
+	local tabContainerLayout = create("UIListLayout", {
+		Padding = UDim.new(0, 7),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, tabContainer)
 
 	local section = setmetatable({
 		_window = self,
 		_container = container,
+		_header = sectionHeader,
+		_tabContainer = tabContainer,
 		_tabs = {},
-		_title = options.title or options.Name or ("Section " .. sectionIndex),
+		_title = sectionTitle,
+		_open = true,
 	}, { __index = SimpleLib.NavigationSection })
+	function section:SetOpen(isOpen)
+		self._open = isOpen
+		self._tabContainer.Visible = isOpen
+		self._header.Text = (isOpen and "↑   " or "↓   ") .. self._title
+	end
+	sectionHeader.Activated:Connect(function()
+		section:SetOpen(not section._open)
+	end)
+	tabContainerLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		tabContainer.Size = UDim2.new(1, 0, 0, tabContainerLayout.AbsoluteContentSize.Y)
+	end)
 	table.insert(self._navigationSections, section)
 	return section
 end
@@ -709,8 +737,8 @@ function SimpleLib.NavigationSection:tab(options)
 		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		LayoutOrder = #self._tabs + 2,
-	}, self._container)
+		LayoutOrder = #self._tabs + 1,
+	}, self._tabContainer)
 	addCorner(tabButton, 9)
 	addPadding(tabButton, 10, 0, 8, 0)
 
@@ -720,14 +748,14 @@ function SimpleLib.NavigationSection:tab(options)
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		CanvasSize = UDim2.new(),
-		AutomaticCanvasSize = Enum.AutomaticSize.None,
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 		ScrollBarThickness = 3,
 		ScrollBarImageColor3 = COLORS.accent,
-		Visible = #window._tabs == 0,
+		Visible = false,
 	}, self._pages)
 	addPadding(page, 18, 18, 18, 18)
-	local pageLayout = create("UIListLayout", {
+	create("UIListLayout", {
 		Padding = UDim.new(0, 17),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, page)
@@ -744,6 +772,9 @@ function SimpleLib.NavigationSection:tab(options)
 	table.insert(window._tabs, tab)
 
 	local function selectTab()
+		if not self._open then
+			self:SetOpen(true)
+		end
 		for _, existingTab in ipairs(window._tabs) do
 			local selected = existingTab == tab
 			existingTab._page.Visible = selected
@@ -755,14 +786,9 @@ function SimpleLib.NavigationSection:tab(options)
 	end
 	tabButton.Activated:Connect(selectTab)
 	if #window._tabs == 1 then
-		tabButton.BackgroundColor3 = COLORS.accent
-		tabButton.TextColor3 = COLORS.text
+		selectTab()
 	end
 
-	pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-		page.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 36)
-	end)
-	page.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 36)
 	return tab
 end
 
