@@ -16,6 +16,49 @@ local COLORS = {
 	border = Color3.fromRGB(47, 52, 66),
 }
 
+local API_ALIASES = {
+	window = {
+		window = "win",
+		CreateWindow = "win",
+		tab = "tab",
+		CreateTab = "tab",
+		section = "section",
+		CreateSection = "section",
+		destroy = "destroy",
+		Destroy = "destroy",
+	},
+	tab = {
+		section = "section",
+		CreateSection = "section",
+		button = "button",
+		btn = "button",
+		CreateButton = "button",
+		toggle = "toggle",
+		tog = "toggle",
+		CreateToggle = "toggle",
+		dropdown = "dropdown",
+		dd = "dropdown",
+		CreateDropdown = "dropdown",
+	},
+	section = {
+		button = "button",
+		btn = "button",
+		CreateButton = "button",
+		toggle = "toggle",
+		tog = "toggle",
+		CreateToggle = "toggle",
+		dropdown = "dropdown",
+		dd = "dropdown",
+		CreateDropdown = "dropdown",
+	},
+}
+
+local function applyAliases(target, aliases)
+	for alias, method in pairs(aliases) do
+		target[alias] = target[method]
+	end
+end
+
 local function create(className, properties, parent)
 	local object = Instance.new(className)
 	for property, value in pairs(properties) do
@@ -224,24 +267,13 @@ function SimpleLib:win(options)
 		Size = UDim2.fromOffset(22, 22),
 		BackgroundTransparency = 1,
 		AutoButtonColor = false,
-		Text = "",
+		Font = Enum.Font.GothamMedium,
+		Text = "↘",
+		TextColor3 = COLORS.muted,
+		TextSize = 17,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		TextYAlignment = Enum.TextYAlignment.Bottom,
 	}, main)
-	create("Frame", {
-		Position = UDim2.new(1, -15, 1, -8),
-		Size = UDim2.fromOffset(9, 2),
-		Rotation = -45,
-		BackgroundColor3 = COLORS.muted,
-		BorderSizePixel = 0,
-		Active = false,
-	}, resizeGrip)
-	create("Frame", {
-		Position = UDim2.new(1, -9, 1, -8),
-		Size = UDim2.fromOffset(5, 2),
-		Rotation = -45,
-		BackgroundColor3 = COLORS.muted,
-		BorderSizePixel = 0,
-		Active = false,
-	}, resizeGrip)
 
 	local interaction = window._interaction
 	local dragStart
@@ -526,9 +558,6 @@ function SimpleLib:win(options)
 	return window
 end
 
-SimpleLib.window = SimpleLib.win
-SimpleLib.CreateWindow = SimpleLib.win
-
 function SimpleLib:_updateLoadingProgress()
 	if not self._progressFill or self._loadingFinished then
 		return
@@ -555,7 +584,14 @@ function SimpleLib:finishLoading()
 	task.spawn(function()
 		local remaining = minimumDuration - (os.clock() - self._loadingStartedAt)
 		if remaining > 0 then
+			local progressTween = TweenService:Create(
+				self._progressFill,
+				TweenInfo.new(remaining, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+				{ Size = UDim2.new(0.9, 0, 1, 0) }
+			)
+			progressTween:Play()
 			task.wait(remaining)
+			progressTween:Cancel()
 		end
 		if not self._loadingOverlay or not self._loadingOverlay.Parent then
 			return
@@ -670,8 +706,6 @@ function SimpleLib:tab(options)
 	return tab
 end
 
-SimpleLib.CreateTab = SimpleLib.tab
-
 SimpleLib.Tab = {}
 
 function SimpleLib.Tab:section(options)
@@ -713,6 +747,7 @@ function SimpleLib.Tab:section(options)
 		_container = container,
 		_tab = self,
 		_buttons = {},
+		_controlCount = 0,
 	}, { __index = SimpleLib.Section })
 	table.insert(self._sections, section)
 
@@ -720,64 +755,61 @@ function SimpleLib.Tab:section(options)
 	return section
 end
 
-SimpleLib.Tab.CreateSection = SimpleLib.Tab.section
-
-function SimpleLib.Tab:button(options)
-	return self:section({ title = options and options.section or "Actions" }):button(options)
-end
-
-SimpleLib.Tab.btn = SimpleLib.Tab.button
-SimpleLib.Tab.CreateButton = SimpleLib.Tab.button
-
 SimpleLib.Section = {}
 
-function SimpleLib.Section:button(options)
-	options = options or {}
-	local callback = options.callback or options.Callback
-	assert(callback == nil or type(callback) == "function", "button callback must be a function")
-	local window = self._window
+local function createControlCard(section, options, controlName, accessoryWidth, isButton)
+	local window = section._window
 	window._buttons = window._buttons + 1
-	local buttonIndex = #self._buttons + 1
+	section._controlCount = section._controlCount + 1
 
-	local button = create("TextButton", {
-		Name = "Button_" .. buttonIndex,
+	local cardProperties = {
+		Name = controlName .. "_" .. section._controlCount,
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundColor3 = COLORS.surface,
 		BorderSizePixel = 0,
-		AutoButtonColor = false,
-		Text = "",
-		LayoutOrder = buttonIndex + 1,
-	}, self._container)
-	addCorner(button, 10)
-	addPadding(button, 13, 10, 13, 10)
-	local buttonScale = create("UIScale", {
+		LayoutOrder = section._controlCount + 1,
+	}
+	if isButton then
+		cardProperties.AutoButtonColor = false
+		cardProperties.Text = ""
+	end
+	local card = create(isButton and "TextButton" or "Frame", cardProperties, section._container)
+	addCorner(card, 10)
+	addPadding(card, 13, 10, 13, 10)
+
+	local scale = create("UIScale", {
 		Scale = 1,
-	}, button)
-	create("UIListLayout", {
-		Padding = UDim.new(0, 3),
-		SortOrder = Enum.SortOrder.LayoutOrder,
-	}, button)
-	local buttonStroke = create("UIStroke", {
+	}, card)
+	local stroke = create("UIStroke", {
 		Color = COLORS.border,
 		Transparency = 0.45,
 		Thickness = 1,
-	}, button)
-	create("TextLabel", {
-		Name = "Title",
+	}, card)
+	create("UIListLayout", {
+		Padding = UDim.new(0, 3),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, card)
+
+	local row = create("Frame", {
+		Name = "Header",
 		Size = UDim2.new(1, 0, 0, 20),
 		BackgroundTransparency = 1,
+		LayoutOrder = 1,
+	}, card)
+	local title = create("TextLabel", {
+		Name = "Title",
+		Size = UDim2.new(1, -(accessoryWidth or 0), 1, 0),
+		BackgroundTransparency = 1,
 		Font = Enum.Font.GothamSemibold,
-		Text = options.title or options.Name or "Button",
+		Text = options.title or options.Name or controlName,
 		TextColor3 = COLORS.text,
 		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		LayoutOrder = 1,
 		Active = false,
-	}, button)
-
-	create("TextLabel", {
+	}, row)
+	local description = create("TextLabel", {
 		Name = "Description",
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
@@ -791,38 +823,312 @@ function SimpleLib.Section:button(options)
 		TextYAlignment = Enum.TextYAlignment.Top,
 		LayoutOrder = 2,
 		Active = false,
-	}, button)
+	}, card)
 
-	button.MouseEnter:Connect(function()
-		tween(button, 0.14, { BackgroundColor3 = COLORS.surfaceHover })
-	end)
-	button.MouseLeave:Connect(function()
-		tween(button, 0.14, { BackgroundColor3 = COLORS.surface })
-	end)
-	button.Activated:Connect(function()
-		tween(buttonScale, 0.08, { Scale = 0.97 }).Completed:Connect(function()
-			if buttonScale.Parent then
-				tween(buttonScale, 0.16, { Scale = 1 })
+	local function animatePress()
+		tween(scale, 0.08, { Scale = 0.98 }).Completed:Connect(function()
+			if scale.Parent then
+				tween(scale, 0.16, { Scale = 1 })
 			end
 		end)
-		tween(buttonStroke, 0.12, { Color = COLORS.accent, Transparency = 0.12 })
+		tween(stroke, 0.12, { Color = COLORS.accent, Transparency = 0.12 })
 		task.delay(0.14, function()
-			if buttonStroke.Parent then
-				tween(buttonStroke, 0.2, { Color = COLORS.border, Transparency = 0.45 })
+			if stroke.Parent then
+				tween(stroke, 0.2, { Color = COLORS.border, Transparency = 0.45 })
 			end
 		end)
+	end
+
+	card.MouseEnter:Connect(function()
+		tween(card, 0.14, { BackgroundColor3 = COLORS.surfaceHover })
+	end)
+	card.MouseLeave:Connect(function()
+		tween(card, 0.14, { BackgroundColor3 = COLORS.surface })
+	end)
+
+	window:_updateLoadingProgress()
+	return {
+		card = card,
+		row = row,
+		title = title,
+		description = description,
+		scale = scale,
+		stroke = stroke,
+		animatePress = animatePress,
+	}
+end
+
+local function getCallback(options)
+	local callback = options.callback or options.Callback
+	assert(callback == nil or type(callback) == "function", "control callback must be a function")
+	return callback
+end
+
+function SimpleLib.Section:button(options)
+	options = options or {}
+	local callback = getCallback(options)
+	local control = createControlCard(self, options, "Button", nil, true)
+	control.card.Activated:Connect(function()
+		control.animatePress()
 		if callback then
 			callback()
 		end
 	end)
-
-	table.insert(self._buttons, button)
-	window:_updateLoadingProgress()
-	return button
+	return control.card
 end
 
-SimpleLib.Section.btn = SimpleLib.Section.button
-SimpleLib.Section.CreateButton = SimpleLib.Section.button
+function SimpleLib.Section:toggle(options)
+	options = options or {}
+	local callback = getCallback(options)
+	local control = createControlCard(self, options, "Toggle", 52)
+	local isEnabled = options.default
+	if isEnabled == nil then
+		isEnabled = options.Default
+	end
+	if isEnabled == nil then
+		isEnabled = options.value
+	end
+	if isEnabled == nil then
+		isEnabled = options.Value
+	end
+	if isEnabled == nil then
+		isEnabled = false
+	end
+	assert(type(isEnabled) == "boolean", "toggle default value must be a boolean")
+
+	local switch = create("TextButton", {
+		Name = "Switch",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, 0, 0.5, 0),
+		Size = UDim2.fromOffset(38, 20),
+		BackgroundColor3 = isEnabled and COLORS.accent or COLORS.border,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
+	}, control.row)
+	addCorner(switch, 10)
+	local knob = create("Frame", {
+		Name = "Knob",
+		Position = UDim2.fromOffset(isEnabled and 20 or 2, 2),
+		Size = UDim2.fromOffset(16, 16),
+		BackgroundColor3 = COLORS.text,
+		BorderSizePixel = 0,
+		Active = false,
+	}, switch)
+	addCorner(knob, 8)
+
+	local toggle = {
+		_value = isEnabled,
+		_instance = control.card,
+	}
+	function toggle:Get()
+		return self._value
+	end
+	function toggle:Set(value, shouldNotify)
+		assert(type(value) == "boolean", "toggle value must be a boolean")
+		self._value = value
+		tween(switch, 0.16, {
+			BackgroundColor3 = value and COLORS.accent or COLORS.border,
+		})
+		tween(knob, 0.16, {
+			Position = UDim2.fromOffset(value and 20 or 2, 2),
+		})
+		if shouldNotify ~= false and callback then
+			callback(value)
+		end
+	end
+	function toggle:Destroy()
+		if self._instance then
+			self._instance:Destroy()
+			self._instance = nil
+		end
+	end
+
+	switch.Activated:Connect(function()
+		control.animatePress()
+		toggle:Set(not toggle._value)
+	end)
+	return toggle
+end
+
+function SimpleLib.Section:dropdown(options)
+	options = options or {}
+	local callback = getCallback(options)
+	local suppliedItems = options.items or options.Items or options.item or options.Item or options.options or options.Options or {}
+	local items = {}
+	if type(suppliedItems) == "table" then
+		for index, item in ipairs(suppliedItems) do
+			items[index] = item
+		end
+	else
+		items[1] = suppliedItems
+	end
+	for index, item in ipairs(items) do
+		assert(type(item) == "string" or type(item) == "number", "dropdown items must be strings or numbers")
+		items[index] = tostring(item)
+	end
+
+	local control = createControlCard(self, options, "Dropdown", 132)
+	local selected = options.default or options.Default or options.value or options.Value
+	if selected ~= nil then
+		selected = tostring(selected)
+		assert(table.find(items, selected), "dropdown default must match one of its items")
+	else
+		selected = nil
+	end
+
+	local selectedLabel = create("TextLabel", {
+		Name = "SelectedValue",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -19, 0.5, 0),
+		Size = UDim2.new(0, 104, 1, 0),
+		BackgroundTransparency = 1,
+		Font = Enum.Font.Gotham,
+		Text = selected or "Chọn...",
+		TextColor3 = selected and COLORS.text or COLORS.muted,
+		TextSize = 11,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Active = false,
+	}, control.row)
+	local arrow = create("TextLabel", {
+		Name = "Arrow",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, 0, 0.5, 0),
+		Size = UDim2.fromOffset(14, 18),
+		BackgroundTransparency = 1,
+		Font = Enum.Font.GothamMedium,
+		Text = "⌄",
+		TextColor3 = COLORS.muted,
+		TextSize = 14,
+		Active = false,
+	}, control.row)
+	control.title.Size = UDim2.new(1, -140, 1, 0)
+
+	local rowButton = create("TextButton", {
+		Name = "DropdownHeaderButton",
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundTransparency = 1,
+		AutoButtonColor = false,
+		Text = "",
+	}, control.row)
+	rowButton.ZIndex = selectedLabel.ZIndex + 1
+
+	local optionsList = create("Frame", {
+		Name = "Options",
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		Visible = false,
+		LayoutOrder = 3,
+	}, control.card)
+	create("UIListLayout", {
+		Padding = UDim.new(0, 4),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, optionsList)
+
+	local dropdown = {
+		_value = selected,
+		_options = items,
+		_instance = control.card,
+		_open = false,
+	}
+	function dropdown:Get()
+		return self._value
+	end
+	function dropdown:Set(value, shouldNotify)
+		if value ~= nil then
+			value = tostring(value)
+			assert(table.find(self._options, value), "dropdown value must match one of its items")
+		end
+		self._value = value
+		selectedLabel.Text = value or "Chọn..."
+		selectedLabel.TextColor3 = value and COLORS.text or COLORS.muted
+		if shouldNotify ~= false and callback then
+			callback(value, value and table.find(self._options, value) or nil)
+		end
+	end
+	function dropdown:SetOptions(newItems)
+		assert(type(newItems) == "table", "dropdown options must be a table")
+		self._options = {}
+		for index, item in ipairs(newItems) do
+			assert(type(item) == "string" or type(item) == "number", "dropdown items must be strings or numbers")
+			self._options[index] = tostring(item)
+		end
+		self._value = nil
+		selectedLabel.Text = "Chọn..."
+		selectedLabel.TextColor3 = COLORS.muted
+		for _, child in ipairs(optionsList:GetChildren()) do
+			if child:IsA("TextButton") then
+				child:Destroy()
+			end
+		end
+		for index, item in ipairs(self._options) do
+			local optionButton = create("TextButton", {
+				Name = "Option_" .. index,
+				Size = UDim2.new(1, 0, 0, 30),
+				BackgroundColor3 = COLORS.panel,
+				BorderSizePixel = 0,
+				AutoButtonColor = false,
+				Font = Enum.Font.Gotham,
+				Text = item,
+				TextColor3 = COLORS.text,
+				TextSize = 11,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				LayoutOrder = index,
+			}, optionsList)
+			addCorner(optionButton, 7)
+			addPadding(optionButton, 10, 0, 10, 0)
+			optionButton.MouseEnter:Connect(function()
+				tween(optionButton, 0.12, { BackgroundColor3 = COLORS.surfaceHover })
+			end)
+			optionButton.MouseLeave:Connect(function()
+				tween(optionButton, 0.12, { BackgroundColor3 = COLORS.panel })
+			end)
+			optionButton.Activated:Connect(function()
+				control.animatePress()
+				self:Set(item)
+				self._open = false
+				optionsList.Visible = false
+				arrow.Text = "⌄"
+			end)
+		end
+	end
+	function dropdown:Destroy()
+		if self._instance then
+			self._instance:Destroy()
+			self._instance = nil
+		end
+	end
+
+	rowButton.Activated:Connect(function()
+		control.animatePress()
+		dropdown._open = not dropdown._open
+		optionsList.Visible = dropdown._open
+		arrow.Text = dropdown._open and "⌃" or "⌄"
+	end)
+	dropdown:SetOptions(items)
+	if selected then
+		dropdown:Set(selected, false)
+	end
+	return dropdown
+end
+
+function SimpleLib.Tab:button(options)
+	return self:section({ title = options and options.section or "Actions" }):button(options)
+end
+
+function SimpleLib.Tab:toggle(options)
+	return self:section({ title = options and options.section or "Options" }):toggle(options)
+end
+
+function SimpleLib.Tab:dropdown(options)
+	return self:section({ title = options and options.section or "Options" }):dropdown(options)
+end
+
+SimpleLib.Tab.CreateSection = SimpleLib.Tab.section
+applyAliases(SimpleLib.Tab, API_ALIASES.tab)
+applyAliases(SimpleLib.Section, API_ALIASES.section)
 
 function SimpleLib:destroy()
 	for _, connection in ipairs(self._connections) do
@@ -837,7 +1143,6 @@ function SimpleLib:destroy()
 	self._confirmDialog = nil
 end
 
-SimpleLib.CreateSection = SimpleLib.section
-SimpleLib.Destroy = SimpleLib.destroy
+applyAliases(SimpleLib, API_ALIASES.window)
 
 return SimpleLib
