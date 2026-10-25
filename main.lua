@@ -40,6 +40,10 @@ local API_ALIASES = {
 		dd = "dropdown",
 		CreateDropdown = "dropdown",
 	},
+	navigationSection = {
+		tab = "tab",
+		CreateTab = "tab",
+	},
 	section = {
 		button = "button",
 		btn = "button",
@@ -110,6 +114,7 @@ function SimpleLib:win(options)
 	local window = setmetatable({
 		_screenGui = screenGui,
 		_tabs = {},
+		_navigationSections = {},
 		_sections = 0,
 		_buttons = 0,
 		_loadingOptions = options.loading,
@@ -239,18 +244,25 @@ function SimpleLib:win(options)
 	}, main)
 	window._body = body
 
-	local sidebar = create("Frame", {
+	local sidebar = create("ScrollingFrame", {
 		Name = "Sidebar",
 		Size = UDim2.new(0, 142, 1, 0),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.None,
+		ScrollBarThickness = 3,
+		ScrollBarImageColor3 = COLORS.accent,
 	}, body)
 	addPadding(sidebar, 10, 13, 10, 12)
-	create("UIListLayout", {
+	local sidebarLayout = create("UIListLayout", {
 		Padding = UDim.new(0, 7),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, sidebar)
 	window._sidebar = sidebar
+	sidebarLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		sidebar.CanvasSize = UDim2.new(0, 0, 0, sidebarLayout.AbsoluteContentSize.Y + 25)
+	end)
 
 	local pages = create("Frame", {
 		Name = "Pages",
@@ -621,30 +633,74 @@ function SimpleLib:finishLoading()
 	end)
 end
 
-function SimpleLib:_ensureDefaultTab()
-	if self._tabs[1] then
-		return self._tabs[1]
+function SimpleLib:_ensureDefaultNavigationSection()
+	if self._navigationSections[1] then
+		return self._navigationSections[1]
 	end
-	return self:tab({ title = "Main" })
+	return self:section({ title = "Main" })
 end
+
+SimpleLib.NavigationSection = {}
 
 function SimpleLib:section(options)
-	return self:_ensureDefaultTab():section(options)
-end
-
-function SimpleLib:tab(options)
 	if type(options) == "string" then
 		options = { title = options }
 	else
 		options = options or {}
 	end
-	local tabIndex = #self._tabs + 1
+
+	local sectionIndex = #self._navigationSections + 1
+	local container = create("Frame", {
+		Name = "NavigationSection_" .. sectionIndex,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		LayoutOrder = sectionIndex,
+	}, self._sidebar)
+	create("UIListLayout", {
+		Padding = UDim.new(0, 5),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, container)
+	create("TextLabel", {
+		Name = "SectionTitle",
+		Size = UDim2.new(1, 0, 0, 22),
+		BackgroundTransparency = 1,
+		Font = Enum.Font.GothamSemibold,
+		Text = options.title or options.Name or ("Section " .. sectionIndex),
+		TextColor3 = COLORS.muted,
+		TextSize = 11,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		LayoutOrder = 1,
+	}, container)
+
+	local section = setmetatable({
+		_window = self,
+		_container = container,
+		_tabs = {},
+		_title = options.title or options.Name or ("Section " .. sectionIndex),
+	}, { __index = SimpleLib.NavigationSection })
+	table.insert(self._navigationSections, section)
+	return section
+end
+
+function SimpleLib:tab(options)
+	return self:_ensureDefaultNavigationSection():tab(options)
+end
+
+function SimpleLib.NavigationSection:tab(options)
+	if type(options) == "string" then
+		options = { title = options }
+	else
+		options = options or {}
+	end
+	local window = self._window
+	local tabIndex = #window._tabs + 1
 	local tabTitle = options.title or options.Name or ("Tab " .. tabIndex)
 
 	local tabButton = create("TextButton", {
 		Name = "Tab_" .. tabIndex,
 		Size = UDim2.new(1, 0, 0, 36),
-		BackgroundColor3 = COLORS.panel,
+		BackgroundColor3 = COLORS.surface,
 		BorderSizePixel = 0,
 		AutoButtonColor = false,
 		Font = Enum.Font.GothamMedium,
@@ -653,21 +709,22 @@ function SimpleLib:tab(options)
 		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		LayoutOrder = tabIndex,
-	}, self._sidebar)
+		LayoutOrder = #self._tabs + 2,
+	}, self._container)
 	addCorner(tabButton, 9)
-	addPadding(tabButton, 12, 0, 8, 0)
+	addPadding(tabButton, 10, 0, 8, 0)
 
 	local page = create("ScrollingFrame", {
-		Name = "Page_" .. tabIndex,
+		Name = "BtnPart_" .. tabIndex,
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		CanvasSize = UDim2.new(),
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		AutomaticCanvasSize = Enum.AutomaticSize.None,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
 		ScrollBarThickness = 3,
 		ScrollBarImageColor3 = COLORS.accent,
-		Visible = tabIndex == 1,
+		Visible = #window._tabs == 0,
 	}, self._pages)
 	addPadding(page, 18, 18, 18, 18)
 	local pageLayout = create("UIListLayout", {
@@ -676,35 +733,40 @@ function SimpleLib:tab(options)
 	}, page)
 
 	local tab = setmetatable({
-		_window = self,
+		_window = window,
+		_navigationSection = self,
 		_button = tabButton,
 		_page = page,
 		_sections = {},
 		_title = tabTitle,
 	}, { __index = SimpleLib.Tab })
 	table.insert(self._tabs, tab)
+	table.insert(window._tabs, tab)
 
 	local function selectTab()
-		for _, existingTab in ipairs(self._tabs) do
+		for _, existingTab in ipairs(window._tabs) do
 			local selected = existingTab == tab
 			existingTab._page.Visible = selected
 			tween(existingTab._button, 0.15, {
-				BackgroundColor3 = selected and COLORS.surface or COLORS.panel,
+				BackgroundColor3 = selected and COLORS.accent or COLORS.surface,
 				TextColor3 = selected and COLORS.text or COLORS.muted,
 			})
 		end
 	end
 	tabButton.Activated:Connect(selectTab)
-	if tabIndex == 1 then
-		tabButton.BackgroundColor3 = COLORS.surface
+	if #window._tabs == 1 then
+		tabButton.BackgroundColor3 = COLORS.accent
 		tabButton.TextColor3 = COLORS.text
 	end
 
 	pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 		page.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 36)
 	end)
+	page.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 36)
 	return tab
 end
+
+applyAliases(SimpleLib.NavigationSection, API_ALIASES.navigationSection)
 
 SimpleLib.Tab = {}
 
