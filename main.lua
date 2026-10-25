@@ -913,15 +913,18 @@ function SimpleLib.Tab:section(options)
 
 	local container = create("Frame", {
 		Name = "Section_" .. sectionIndex,
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, 0, 0, 22),
 		BackgroundTransparency = 1,
 		LayoutOrder = sectionIndex,
 	}, self._page)
-	create("UIListLayout", {
+	local sectionLayout = create("UIListLayout", {
 		Padding = UDim.new(0, 9),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, container)
+	local function updateSectionSize()
+		container.Size = UDim2.new(1, 0, 0, sectionLayout.AbsoluteContentSize.Y)
+	end
+	sectionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateSectionSize)
 
 	local heading = create("TextLabel", {
 		Name = "SectionTitle",
@@ -944,6 +947,7 @@ function SimpleLib.Tab:section(options)
 	}, { __index = SimpleLib.Section })
 	table.insert(self._sections, section)
 
+	updateSectionSize()
 	window:_updateLoadingProgress()
 	return section
 end
@@ -957,8 +961,7 @@ local function createControlCard(section, options, controlName, accessoryWidth, 
 
 	local cardProperties = {
 		Name = controlName .. "_" .. section._controlCount,
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, 0, 0, 40),
 		BackgroundColor3 = COLORS.surface,
 		BorderSizePixel = 0,
 		LayoutOrder = section._controlCount + 1,
@@ -979,10 +982,14 @@ local function createControlCard(section, options, controlName, accessoryWidth, 
 		Transparency = 0.45,
 		Thickness = 1,
 	}, card)
-	create("UIListLayout", {
+	local cardLayout = create("UIListLayout", {
 		Padding = UDim.new(0, 3),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, card)
+	local function updateCardSize()
+		card.Size = UDim2.new(1, 0, 0, cardLayout.AbsoluteContentSize.Y + 20)
+	end
+	cardLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCardSize)
 
 	local row = create("Frame", {
 		Name = "Header",
@@ -1017,6 +1024,8 @@ local function createControlCard(section, options, controlName, accessoryWidth, 
 		LayoutOrder = 2,
 		Active = false,
 	}, card)
+	description:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateCardSize)
+	updateCardSize()
 
 	local function animatePress()
 		if control._pressTween then
